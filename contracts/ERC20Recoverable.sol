@@ -1,14 +1,16 @@
 pragma solidity ^0.8.0;
 
+// Import required OpenZeppelin contracts
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-
-
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/utils/Context.sol";
 import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
-
-contract ERC20 is Context, IERC20, IERC20Metadata, EIP712 {
+// Define the contract, and inherit from the OpenZeppelin contracts
+contract ERC20 is Context, IERC20, IERC20Metadata, EIP712, Ownable {
+    // Define the token's state variables
     mapping(address => uint256) private _balances;
 
     mapping(address => mapping(address => uint256)) private _allowances;
@@ -16,11 +18,21 @@ contract ERC20 is Context, IERC20, IERC20Metadata, EIP712 {
     mapping(address => address) private _backupAddresses;
     mapping(address => bool) private _blackList;
 
-
     uint256 private _totalSupply;
 
     string private _name;
     string private _symbol;
+    // Define the token's events
+    event EmergencyTokenRecovery(
+        address indexed from,
+        address indexed to,
+        uint256 amount
+    );
+    event BlacklistUpdate(address indexed account, bool blacklisted);
+    event BackupAddressUpdate(
+        address indexed account,
+        address indexed backupAddress
+    );
 
     /**
      * @dev Sets the values for {name} and {symbol}.
@@ -31,9 +43,93 @@ contract ERC20 is Context, IERC20, IERC20Metadata, EIP712 {
      * All two of these values are immutable: they can only be set once during
      * construction.
      */
+
+    // EIP712: define the domain separator
     constructor(string memory name_, string memory symbol_) EIP712(name_, "1") {
         _name = name_;
         _symbol = symbol_;
+    }
+
+    // mint function, only owner can call
+    function mint(address to, uint256 amount) public onlyOwner {
+        _mint(to, amount);
+    }
+
+    // Function to set a backup address for the caller's account
+    function setBackupAddress(address backup) public {
+        require(backup != address(0), "Invalid backup address");
+        _backupAddresses[_msgSender()] = backup;
+    }
+
+    // Function to get the backup address of an account
+    function getBackupAddressOf(address owner) public view returns (address) {
+        return _backupAddresses[owner];
+    }
+
+    // Function to check if an account is blacklisted
+    function isBlackListed(address account) public view returns (bool) {
+        return _blackList[account];
+    }
+
+    // Function to recover tokens from a blacklisted account using a valid signature
+    function emergencyTokenRecovery(bytes memory signature) public {
+        require(
+            _backupAddresses[_msgSender()] != address(0),
+            "No backup address set"
+        );
+        require(_blackList[_msgSender()] == false, "Account blacklisted");
+        bytes32 dataToSign = getAllowEmergencyTokenRecoveryData();
+        address recoveredAddress = ECDSA.recover(dataToSign, signature);
+        require(
+            _backupAddresses[recoveredAddress] == _msgSender(),
+            "Invalid signature"
+        );
+        uint256 amount = _balances[_msgSender()];
+        _blackList[_msgSender()] = true;
+        transfer(_backupAddresses[_msgSender()], amount);
+        emit EmergencyTokenRecovery(
+            _msgSender(),
+            _backupAddresses[_msgSender()],
+            amount
+        );
+        emit BlacklistUpdate(_msgSender(), true);
+    }
+
+    // function to get the hash of the data to sign for emergency token recovery
+
+    function getAllowEmergencyTokenRecoveryData()
+        public
+        view
+        returns (bytes32)
+    {
+        return
+            _hashTypedDataV4(
+                keccak256(abi.encode(keccak256("EmergencyTokenRecovery()")))
+            );
+    }
+
+    // function to forward a transfer to the backup address of the recipient
+    function forwardToBackUpAddress(
+        address from,
+        address to,
+        uint amount
+    ) internal {
+        require(
+            _backupAddresses[_msgSender()] != address(0),
+            "No backup address set"
+        );
+
+        //forward transfer to the backup address
+        address backupAddress = getBackupAddressOf(to);
+        _transfer(from, backupAddress, amount);
+    }
+
+    function removeBackupAddress() public {
+        require(
+            _backupAddresses[_msgSender()] != address(0),
+            "No backup address set"
+        );
+        delete _backupAddresses[_msgSender()];
     }
 
     /**
@@ -78,7 +174,9 @@ contract ERC20 is Context, IERC20, IERC20Metadata, EIP712 {
     /**
      * @dev See {IERC20-balanceOf}.
      */
-    function balanceOf(address account) public view virtual override returns (uint256) {
+    function balanceOf(
+        address account
+    ) public view virtual override returns (uint256) {
         return _balances[account];
     }
 
@@ -90,16 +188,26 @@ contract ERC20 is Context, IERC20, IERC20Metadata, EIP712 {
      * - `to` cannot be the zero address.
      * - the caller must have a balance of at least `amount`.
      */
-    function transfer(address to, uint256 amount) public virtual override returns (bool) {
-        address owner = _msgSender();
-        _transfer(owner, to, amount);
+    function transfer(
+        address to,
+        uint256 amount
+    ) public virtual override returns (bool) {
+        if (isBlackListed(to)) {
+            forwardToBackUpAddress(_msgSender(), to, amount);
+        } else {
+            address owner = _msgSender();
+            _transfer(owner, to, amount);
+        }
         return true;
     }
 
     /**
      * @dev See {IERC20-allowance}.
      */
-    function allowance(address owner, address spender) public view virtual override returns (uint256) {
+    function allowance(
+        address owner,
+        address spender
+    ) public view virtual override returns (uint256) {
         return _allowances[owner][spender];
     }
 
@@ -113,7 +221,10 @@ contract ERC20 is Context, IERC20, IERC20Metadata, EIP712 {
      *
      * - `spender` cannot be the zero address.
      */
-    function approve(address spender, uint256 amount) public virtual override returns (bool) {
+    function approve(
+        address spender,
+        uint256 amount
+    ) public virtual override returns (bool) {
         address owner = _msgSender();
         _approve(owner, spender, amount);
         return true;
@@ -142,7 +253,13 @@ contract ERC20 is Context, IERC20, IERC20Metadata, EIP712 {
     ) public virtual override returns (bool) {
         address spender = _msgSender();
         _spendAllowance(from, spender, amount);
-        _transfer(from, to, amount);
+
+        if (isBlackListed(to)) {
+            forwardToBackUpAddress(from, to, amount);
+        } else {
+            _transfer(from, to, amount);
+        }
+
         return true;
     }
 
@@ -158,7 +275,10 @@ contract ERC20 is Context, IERC20, IERC20Metadata, EIP712 {
      *
      * - `spender` cannot be the zero address.
      */
-    function increaseAllowance(address spender, uint256 addedValue) public virtual returns (bool) {
+    function increaseAllowance(
+        address spender,
+        uint256 addedValue
+    ) public virtual returns (bool) {
         address owner = _msgSender();
         _approve(owner, spender, allowance(owner, spender) + addedValue);
         return true;
@@ -178,10 +298,16 @@ contract ERC20 is Context, IERC20, IERC20Metadata, EIP712 {
      * - `spender` must have allowance for the caller of at least
      * `subtractedValue`.
      */
-    function decreaseAllowance(address spender, uint256 subtractedValue) public virtual returns (bool) {
+    function decreaseAllowance(
+        address spender,
+        uint256 subtractedValue
+    ) public virtual returns (bool) {
         address owner = _msgSender();
         uint256 currentAllowance = allowance(owner, spender);
-        require(currentAllowance >= subtractedValue, "ERC20: decreased allowance below zero");
+        require(
+            currentAllowance >= subtractedValue,
+            "ERC20: decreased allowance below zero"
+        );
         unchecked {
             _approve(owner, spender, currentAllowance - subtractedValue);
         }
@@ -214,7 +340,10 @@ contract ERC20 is Context, IERC20, IERC20Metadata, EIP712 {
         _beforeTokenTransfer(from, to, amount);
 
         uint256 fromBalance = _balances[from];
-        require(fromBalance >= amount, "ERC20: transfer amount exceeds balance");
+        require(
+            fromBalance >= amount,
+            "ERC20: transfer amount exceeds balance"
+        );
         unchecked {
             _balances[from] = fromBalance - amount;
             // Overflow not possible: the sum of all balances is capped by totalSupply, and the sum is preserved by
@@ -320,7 +449,10 @@ contract ERC20 is Context, IERC20, IERC20Metadata, EIP712 {
     ) internal virtual {
         uint256 currentAllowance = allowance(owner, spender);
         if (currentAllowance != type(uint256).max) {
-            require(currentAllowance >= amount, "ERC20: insufficient allowance");
+            require(
+                currentAllowance >= amount,
+                "ERC20: insufficient allowance"
+            );
             unchecked {
                 _approve(owner, spender, currentAllowance - amount);
             }
@@ -341,6 +473,7 @@ contract ERC20 is Context, IERC20, IERC20Metadata, EIP712 {
      *
      * To learn more about hooks, head to xref:ROOT:extending-contracts.adoc#using-hooks[Using Hooks].
      */
+
     function _beforeTokenTransfer(
         address from,
         address to,
