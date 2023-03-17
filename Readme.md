@@ -1,0 +1,1 @@
+ganache-cli -m "stereo consider quality wild fat farm symptom bundle laundry one lemon side"

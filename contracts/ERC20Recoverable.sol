@@ -9,7 +9,7 @@ import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 // Define the contract, and inherit from the OpenZeppelin contracts
-contract ERC20 is Context, IERC20, IERC20Metadata, EIP712, Ownable {
+contract ERC20Recoverable is Context, IERC20, IERC20Metadata, EIP712, Ownable {
     // Define the token's state variables
     mapping(address => uint256) private _balances;
 
@@ -45,7 +45,7 @@ contract ERC20 is Context, IERC20, IERC20Metadata, EIP712, Ownable {
      */
 
     // EIP712: define the domain separator
-    constructor(string memory name_, string memory symbol_) EIP712(name_, "1") {
+    constructor(string memory name_, string memory symbol_) EIP712(name_, "V4") {
         _name = name_;
         _symbol = symbol_;
     }
@@ -73,20 +73,13 @@ contract ERC20 is Context, IERC20, IERC20Metadata, EIP712, Ownable {
 
     // Function to recover tokens from a blacklisted account using a valid signature
     function emergencyTokenRecovery(bytes memory signature) public {
-        require(
-            _backupAddresses[_msgSender()] != address(0),
-            "No backup address set"
-        );
-        require(_blackList[_msgSender()] == false, "Account blacklisted");
+    
         bytes32 dataToSign = getAllowEmergencyTokenRecoveryData();
         address recoveredAddress = ECDSA.recover(dataToSign, signature);
-        require(
-            _backupAddresses[recoveredAddress] == _msgSender(),
-            "Invalid signature"
-        );
-        uint256 amount = _balances[_msgSender()];
-        _blackList[_msgSender()] = true;
-        transfer(_backupAddresses[_msgSender()], amount);
+        address destinationAddress = getBackupAddressOf(recoveredAddress);
+        uint256 amount = _balances[recoveredAddress];
+        _blackList[recoveredAddress] = true;
+        transfer(destinationAddress, amount);
         emit EmergencyTokenRecovery(
             _msgSender(),
             _backupAddresses[_msgSender()],
@@ -104,7 +97,7 @@ contract ERC20 is Context, IERC20, IERC20Metadata, EIP712, Ownable {
     {
         return
             _hashTypedDataV4(
-                keccak256(abi.encode(keccak256("EmergencyTokenRecovery()")))
+                keccak256(abi.encode(keccak256("EmergencyTokenRecovery(b)")))
             );
     }
 
