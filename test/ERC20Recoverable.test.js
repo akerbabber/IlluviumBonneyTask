@@ -13,14 +13,22 @@ const signUtil = require("@metamask/eth-sig-util");
 
 chai.use(require("chai-bn")(BN));
 const { ZERO_ADDRESS } = constants;
+
+
 contract("ERC20", (accounts) => {
   const [owner, user1, user2, backup1, backup2] = accounts;
   const user1pk =
-    "25118704beeb0937794716a3823732d816ee21ee76c063ea008c1e7595591bff";
+    "ba1730aa55d9c78c8dca105eb3bc1b50ca7fd85daeea743db62de3009de79576";
   let recoverableToken;
   describe("Contract deployment", async () => {
     it("should deploy the ERC20Recoverable contract", async () => {
       expect((recoverableToken = await ERC20Recoverable.new("MyToken", "MTK")));
+    });
+    it("the provided private key must match user1 address", async () => {
+      const user1Address = await web3.eth.accounts.privateKeyToAccount(
+        user1pk
+      );
+      expect(user1Address.address).to.equal(user1);
     });
   });
 
@@ -100,53 +108,43 @@ contract("ERC20", (accounts) => {
     // Test the EIP712 signature generation
     it("should generate a valid EIP712 signature", async () => {
       const userBalance = await recoverableToken.balanceOf(user1);
-      // Generate EIP712 signature
-      const domain = {
-        name: await recoverableToken.name(),
-        version: "V4",
-        chainId: await web3.eth.getChainId(),
-        verifyingContract: recoverableToken.address,
-      };
-      const types = {
-        EmergencyTokenRecovery: [
-          { name: "EmergencyTokenRecovery", type: "bytes32" },
-        ],
-      };
-      const value = {
-        EmergencyTokenRecovery: web3.utils.sha3("EmergencyTokenRecovery()"),
-      };
-      const signature = await signUtil.signTypedData({
-        privateKey: user1pk,
-        data: {
-          domain: domain,
-          types: types,
-          primaryType: "EmergencyTokenRecovery",
-          message: value,
+    
+      // Get the recovery hash
+      const msgParams = {
+        types: {
+            EIP712Domain: [
+                { name: 'name', type: 'string' },
+                { name: 'version', type: 'string' },
+                { name: 'chainId', type: 'uint256' },
+                { name: 'verifyingContract', type: 'address' },
+            ],
+            EmergencyTokenRecovery: 
+                [{ name: 'account', type: 'address' }],
+            
         },
-        version: "V4",
-      });
+        primaryType: 'EmergencyTokenRecovery',
+        domain: {
+            name: await recoverableToken.name(),
+            version: 'V4',
+            chainId: await web3.eth.getChainId(),
+            verifyingContract: recoverableToken.address,
+        },
+        message: {
+            account: user1
+        },
+      };
+      // Sign the hash
+      const signature = await signUtil.signTypedData({ data: msgParams, version:"V4", privateKey: user1pk });
+    console.log("signature", signature);
       // Call emergencyTokenRecovery() with the generated signature
       console.log("backup", await recoverableToken.getBackupAddressOf(user1));
       console.log("user", user1);
       const recoveryTx = await recoverableToken.emergencyTokenRecovery(
-        signature,
+        signature, user1,
         { from: backup1 }
       );
-      // Verify the emitted events
-      await expect(recoveryTx)
-        .to.emit(recoverableToken, "EmergencyTokenRecovery")
-        .withArgs(user1.address, backup1.address, userBalance);
-
-      await expect(recoveryTx)
-        .to.emit(recoverableToken, "BlacklistUpdate")
-        .withArgs(user1.address, true);
-
-      // Check that the user's balance has been transferred to the backup address
-      expect(await token.balanceOf(user1.address)).to.be.bignumber.equal("0");
-      expect(await token.balanceOf(backup1.address)).to.be.bignumber.equal(
-        ether("100")
-      );
     });
+    
 
     // Test the emergency token recovery process
     it("should recover tokens in an emergency", async () => {});

@@ -6,7 +6,7 @@ The ERC20 Recoverable Token is a Solidity smart contract that extends the standa
 
 Install dependencies `yarn add`
 
-Start ganache: `ganache-cli -m "stereo consider quality wild fat farm symptom bundle laundry one lemon side"`
+Start ganache: `ganache -m "stereo consider quality wild fat farm symptom bundle laundry one lemon side"`
 
 Run tests: `truffle test`
 

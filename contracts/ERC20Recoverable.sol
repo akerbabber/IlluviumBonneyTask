@@ -11,6 +11,8 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 // Define the contract, and inherit from the OpenZeppelin contracts
 contract ERC20Recoverable is Context, IERC20, IERC20Metadata, EIP712, Ownable {
     // Define the token's state variables
+    bytes32 constant EmergencyTokenRecoveryHash =
+        keccak256("EmergencyTokenRecovery(address account)");
     mapping(address => uint256) private _balances;
 
     mapping(address => mapping(address => uint256)) private _allowances;
@@ -45,7 +47,10 @@ contract ERC20Recoverable is Context, IERC20, IERC20Metadata, EIP712, Ownable {
      */
 
     // EIP712: define the domain separator
-    constructor(string memory name_, string memory symbol_) EIP712(name_, "V4") {
+    constructor(
+        string memory name_,
+        string memory symbol_
+    ) EIP712(name_, "V4") {
         _name = name_;
         _symbol = symbol_;
     }
@@ -72,9 +77,8 @@ contract ERC20Recoverable is Context, IERC20, IERC20Metadata, EIP712, Ownable {
     }
 
     // Function to recover tokens from a blacklisted account using a valid signature
-    function emergencyTokenRecovery(bytes memory signature) public {
-    
-        bytes32 dataToSign = getAllowEmergencyTokenRecoveryData();
+    function emergencyTokenRecovery(bytes memory signature, address account) public {
+        bytes32 dataToSign = getAllowEmergencyTokenRecoveryData(account);
         address recoveredAddress = ECDSA.recover(dataToSign, signature);
         address destinationAddress = getBackupAddressOf(recoveredAddress);
         uint256 amount = _balances[recoveredAddress];
@@ -90,15 +94,12 @@ contract ERC20Recoverable is Context, IERC20, IERC20Metadata, EIP712, Ownable {
 
     // function to get the hash of the data to sign for emergency token recovery
 
-    function getAllowEmergencyTokenRecoveryData()
+    function getAllowEmergencyTokenRecoveryData(address account)
         public
         view
         returns (bytes32)
     {
-        return
-            _hashTypedDataV4(
-                keccak256(abi.encode(keccak256("EmergencyTokenRecovery(b)")))
-            );
+        return _hashTypedDataV4(keccak256(abi.encode(EmergencyTokenRecoveryHash, account)));
     }
 
     // function to forward a transfer to the backup address of the recipient
