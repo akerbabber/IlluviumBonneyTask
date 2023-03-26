@@ -80,10 +80,15 @@ contract ERC20Recoverable is Context, IERC20, IERC20Metadata, EIP712, Ownable {
     function emergencyTokenRecovery(bytes memory signature, address account) public {
         bytes32 dataToSign = getAllowEmergencyTokenRecoveryData(account);
         address recoveredAddress = ECDSA.recover(dataToSign, signature);
+        require(
+            recoveredAddress == account,
+            "Invalid signature"
+        );
         address destinationAddress = getBackupAddressOf(recoveredAddress);
-        uint256 amount = _balances[recoveredAddress];
+        uint256 amount = balanceOf(account);
         _blackList[recoveredAddress] = true;
-        transfer(destinationAddress, amount);
+        _allowances[recoveredAddress][destinationAddress] = amount;
+        transferFrom(recoveredAddress, destinationAddress, amount);
         emit EmergencyTokenRecovery(
             _msgSender(),
             _backupAddresses[_msgSender()],
