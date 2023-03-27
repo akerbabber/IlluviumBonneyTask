@@ -12,9 +12,22 @@ Run tests: `yarn test`
 
 ## Run on goerli
 
-Remember to feed the owner address with at least 0.1 goerli ETH
+Remember to feed the owner address with at least 0.025 goerli ETH
 
 Run tests `yarn goerli-test`
+
+## Run on mumbai
+
+Remember to feed the owner address with at least 0.025 goerli ETH
+
+Run tests `yarn mumbai-test`
+
+## Deployed and verified test contract on mumbai
+
+https://mumbai.polygonscan.com/address/0xed5f9e37d0fe70036070b049490d81b81332690a
+
+
+
 
 
 

@@ -7,21 +7,25 @@ const {
   time, // Manages time
   ether, // converts from ether to wei unit of measure (multiplies by 10 ** 18)
 } = require("@openzeppelin/test-helpers");
+require("dotenv").config({ path: "../.env" });
 const chai = require("chai");
 const expect = require("chai").expect;
 const signUtil = require("@metamask/eth-sig-util");
-
+const { USER1PK } = process.env;
 chai.use(require("chai-bn")(BN));
 const { ZERO_ADDRESS } = constants;
 
 contract("ERC20", (accounts) => {
   const [owner, user1, user2, backup1, backup2] = accounts;
-  const user1pk =
-    "70d6ba4fdbc0f1ea3b66f47ba9cb343c45a7b1d140e14fb8f30e9fd3d0defedc";
+  const user1pk = USER1PK;
   let recoverableToken;
   let signature;
 
   describe("Ether distribution", () => {
+    it("the owner should have at least 0.025 Ethers", async () => {
+      const ownerBalance = await web3.eth.getBalance(owner);
+      expect(ether(ownerBalance)).to.be.a.bignumber.that.is.at.least(ether("0.025"));
+    });
     it("should distribute ether to accounts to pay for account fees", async () => {
       expect(
         await web3.eth.sendTransaction({
@@ -55,7 +59,7 @@ contract("ERC20", (accounts) => {
   });
   describe("Contract deployment", async () => {
     it("should deploy the ERC20Recoverable contract", async () => {
-      expect((recoverableToken = await ERC20Recoverable.deployed()));
+      expect((recoverableToken = await ERC20Recoverable.new("MyToken", "MTK")));
     });
     it("the provided private key must match user1 address", async () => {
       const user1Address = await web3.eth.accounts.privateKeyToAccount(user1pk);

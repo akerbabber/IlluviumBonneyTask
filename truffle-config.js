@@ -42,7 +42,7 @@
  */
 
 require('dotenv').config();
-const { MNEMONIC, PROJECT_ID } = process.env;
+const { MNEMONIC, GOERLI_PROVIDER, MUMBAI_PROVIDER } = process.env;
 
 const HDWalletProvider = require('@truffle/hdwallet-provider');
 
@@ -83,12 +83,22 @@ module.exports = {
     // Useful for deploying to a public network.
     // Note: It's important to wrap the provider as a function to ensure truffle uses a new provider every time.
      goerli: {
-       provider: () => new HDWalletProvider(MNEMONIC, `https://rpc.ankr.com/eth_goerli`),
+       provider: () => new HDWalletProvider(MNEMONIC, GOERLI_PROVIDER),
        network_id: 5,       // Goerli's id
        confirmations: 2,    // # of confirmations to wait between deployments. (default: 0)
        timeoutBlocks: 200,  // # of blocks before a deployment times out  (minimum/default: 50)
-       skipDryRun: false     // Skip dry run before migrations? (default: false for public nets )
-     },
+       skipDryRun: false,     // Skip dry run before migrations? (default: false for public nets )
+       disableConfirmationListener: true,
+      },
+      mumbai: {
+        provider: () => new HDWalletProvider(MNEMONIC, MUMBAI_PROVIDER),
+        network_id: 80001,       // Mumbai's id
+        confirmations: 0,    // # of confirmations to wait between deployments. (default: 0)
+        timeoutBlocks: 200,  // # of blocks before a deployment times out  (minimum/default: 50)
+        skipDryRun: false,     // Skip dry run before migrations? (default: false for public nets )
+        gasPrice: 4000000000, //4 gwei
+        disableConfirmationListener: true,
+      },
     //
     // Useful for private networks
     // private: {
@@ -121,8 +131,12 @@ module.exports = {
     'truffle-plugin-verify'
   ],
   api_keys: {
-    etherscan: 'MY_API_KEY'
-  }
+    polygonscan: 'your-polygonscan-api-key',
+    etherscan: 'your-etherscan-api-key'
+  },
+  mocha: {
+    retries: 5,
+}
 
   // Truffle DB is currently disabled by default; to enable it, change enabled:
   // false to enabled: true. The default storage location can also be
