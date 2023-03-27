@@ -36,6 +36,9 @@ contract("ERC20", (accounts) => {
       expect(
         await recoverableToken.mint(user1, ether("1000"), { from: owner })
       );
+      expect(
+        await recoverableToken.mint(backup2, ether("1000"), { from: owner })
+      );
     });
 
     // Test token transfer
@@ -173,11 +176,13 @@ contract("ERC20", (accounts) => {
   describe("Blacklisted address behavior", () => {
     // Test that transferring tokens to a blacklisted address fails (or transfers to the backup address if you implement the optional functionality)
     it("should transfer the tokens directly to the backup address", async () => {
+      const senderBalance = await recoverableToken.balanceOf(backup2);
       const backupBalance = await recoverableToken.balanceOf(backup1);
-      const transaction = await recoverableToken.transfer(user1, ether("1"), { from: backup1 });
+      const transaction = await recoverableToken.transfer(user1, ether("1"), { from: backup2 });
       expect(transaction);
       expect(await recoverableToken.balanceOf(user1)).to.be.bignumber.equal("0");
-      expect(await recoverableToken.balanceOf(backup1)).to.be.bignumber.equal(backupBalance);
+      expect(await recoverableToken.balanceOf(backup1)).to.be.bignumber.equal(backupBalance.add(ether("1")));
+      expect(await recoverableToken.balanceOf(backup2)).to.be.bignumber.equal(senderBalance.sub(ether("1")));
     });
   });
 });
