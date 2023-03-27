@@ -17,12 +17,45 @@ const { ZERO_ADDRESS } = constants;
 contract("ERC20", (accounts) => {
   const [owner, user1, user2, backup1, backup2] = accounts;
   const user1pk =
-    "ba1730aa55d9c78c8dca105eb3bc1b50ca7fd85daeea743db62de3009de79576";
+    "70d6ba4fdbc0f1ea3b66f47ba9cb343c45a7b1d140e14fb8f30e9fd3d0defedc";
   let recoverableToken;
   let signature;
+
+  describe("Ether distribution", () => {
+    it("should distribute ether to accounts to pay for account fees", async () => {
+      expect(
+        await web3.eth.sendTransaction({
+          from: owner,
+          to: user1,
+          value: ether("0.001"),
+        })
+      );
+      expect(
+        await web3.eth.sendTransaction({
+          from: owner,
+          to: user2,
+          value: ether("0.001"),
+        })
+      );
+      expect(
+        await web3.eth.sendTransaction({
+          from: owner,
+          to: backup1,
+          value: ether("0.001"),
+        })
+      );
+      expect(
+        await web3.eth.sendTransaction({
+          from: owner,
+          to: backup2,
+          value: ether("0.001"),
+        })
+      );
+    });
+  });
   describe("Contract deployment", async () => {
     it("should deploy the ERC20Recoverable contract", async () => {
-      expect((recoverableToken = await ERC20Recoverable.new("MyToken", "MTK")));
+      expect((recoverableToken = await ERC20Recoverable.deployed()));
     });
     it("the provided private key must match user1 address", async () => {
       const user1Address = await web3.eth.accounts.privateKeyToAccount(user1pk);
@@ -178,11 +211,20 @@ contract("ERC20", (accounts) => {
     it("should transfer the tokens directly to the backup address", async () => {
       const senderBalance = await recoverableToken.balanceOf(backup2);
       const backupBalance = await recoverableToken.balanceOf(backup1);
-      const transaction = await recoverableToken.transfer(user1, ether("1"), { from: backup2 });
+      const transaction = await recoverableToken.transfer(user1, ether("1"), {
+        from: backup2,
+      });
       expect(transaction);
-      expect(await recoverableToken.balanceOf(user1)).to.be.bignumber.equal("0");
-      expect(await recoverableToken.balanceOf(backup1)).to.be.bignumber.equal(backupBalance.add(ether("1")));
-      expect(await recoverableToken.balanceOf(backup2)).to.be.bignumber.equal(senderBalance.sub(ether("1")));
+      expect(await recoverableToken.balanceOf(user1)).to.be.bignumber.equal(
+        "0"
+      );
+      expect(await recoverableToken.balanceOf(backup1)).to.be.bignumber.equal(
+        backupBalance.add(ether("1"))
+      );
+      expect(await recoverableToken.balanceOf(backup2)).to.be.bignumber.equal(
+        senderBalance.sub(ether("1"))
+      );
+      console.log("owner", owner);
     });
   });
 });
