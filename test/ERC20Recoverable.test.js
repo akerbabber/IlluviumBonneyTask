@@ -19,6 +19,7 @@ contract("ERC20", (accounts) => {
   const user1pk =
     "ba1730aa55d9c78c8dca105eb3bc1b50ca7fd85daeea743db62de3009de79576";
   let recoverableToken;
+  let signature;
   describe("Contract deployment", async () => {
     it("should deploy the ERC20Recoverable contract", async () => {
       expect((recoverableToken = await ERC20Recoverable.new("MyToken", "MTK")));
@@ -104,8 +105,6 @@ contract("ERC20", (accounts) => {
   describe("Emergency token recovery", () => {
     // Test the EIP712 signature generation
     it("should generate a valid EIP712 signature", async () => {
-      const userBalance = await recoverableToken.balanceOf(user1);
-
       // Get the recovery hash
       const msgParams = {
         types: {
@@ -129,31 +128,56 @@ contract("ERC20", (accounts) => {
         },
       };
       // Sign the hash
-      const signature = await signUtil.signTypedData({
+      signature = await signUtil.signTypedData({
         data: msgParams,
         version: "V4",
         privateKey: user1pk,
       });
+      const recoveredAddress = web3.utils.toChecksumAddress(
+        await signUtil.recoverTypedSignature({
+          data: msgParams,
+          signature: signature,
+          version: "V4",
+        })
+      );
+      expect(recoveredAddress).to.equal(user1);
+
       console.log("signature", signature);
       // Call emergencyTokenRecovery() with the generated signature
       console.log("backup", await recoverableToken.getBackupAddressOf(user1));
       console.log("user", user1);
+    });
+
+    // Test the emergency token recovery process
+    it("should recover tokens in an emergency", async () => {
+      const userBalance = await recoverableToken.balanceOf(user1);
+      const backupBalance = await recoverableToken.balanceOf(backup1);
       const recoveryTx = await recoverableToken.emergencyTokenRecovery(
         signature,
         user1,
         { from: backup1 }
       );
+      expect(recoveryTx);
+      expect(await recoverableToken.balanceOf(user1)).to.be.bignumber.equal("");
+      expect(await recoverableToken.balanceOf(backup1)).to.be.bignumber.equal(
+        userBalance.add(backupBalance)
+      );
     });
 
-    // Test the emergency token recovery process
-    it("should recover tokens in an emergency", async () => {});
-
     // Test blacklisting of an address after emergency token recovery
-    it("should blacklist an address after emergency token recovery", async () => {});
+    it("should blacklist an address after emergency token recovery", async () => {
+      expect(await recoverableToken.isBlackListed(user1)).to.be.true;
+    });
   });
 
   describe("Blacklisted address behavior", () => {
     // Test that transferring tokens to a blacklisted address fails (or transfers to the backup address if you implement the optional functionality)
-    it("should not transfer tokens to a blacklisted address (or transfer to the backup address)", async () => {});
+    it("should transfer the tokens directly to the backup address", async () => {
+      const backupBalance = await recoverableToken.balanceOf(backup1);
+      const transaction = await recoverableToken.transfer(user1, ether("1"), { from: backup1 });
+      expect(transaction);
+      expect(await recoverableToken.balanceOf(user1)).to.be.bignumber.equal("0");
+      expect(await recoverableToken.balanceOf(backup1)).to.be.bignumber.equal(backupBalance);
+    });
   });
 });

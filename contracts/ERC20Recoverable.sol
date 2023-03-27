@@ -114,7 +114,7 @@ contract ERC20Recoverable is Context, IERC20, IERC20Metadata, EIP712, Ownable {
         uint amount
     ) internal {
         require(
-            _backupAddresses[_msgSender()] != address(0),
+            getBackupAddressOf(to) != address(0),
             "No backup address set"
         );
 
